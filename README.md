@@ -94,9 +94,20 @@ Set these in your environment (Vercel Project Settings → Environment Variables
 
 Base64 private key (recommended on Vercel):
 - Create GOOGLE_PRIVATE_KEY_BASE64 from your private key file:
-  - macOS: pbpaste | base64 | pbcopy   # copy key to clipboard first, then this copies base64 back to clipboard
-  - Linux: base64 -w0 key.pem          # or: cat key.pem | base64 -w0
-  - Windows (PowerShell): [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content key.pem -Raw)))
+  - macOS:
+  ```
+    pbpaste | base64 | pbcopy
+    # copy key to clipboard first, then this copies base64 back to clipboard
+  ```
+  - Linux:
+
+  ```
+  cat key.pem | base64 -w0
+  ```
+  - Windows (PowerShell):
+  ```
+  [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content key.pem -Raw)))
+  ```
 - In Vercel → Project → Settings → Environment Variables:
   - Set GOOGLE_PRIVATE_KEY_BASE64 to the base64 string (no surrounding quotes).
   - Set GOOGLE_SERVICE_ACCOUNT_EMAIL to client_email from the service account JSON.

@@ -155,7 +155,7 @@ export function drinkByIndex(idx: number): Drink | undefined {
  */
 export function buildMainMenu(): InlineKeyboardMarkup {
   const buttons: InlineKeyboardButton[] = DRINKS.map((d, idx) => {
-    const label = `${d.name} (${fmtMoney(d.price)})${d.oat ? " ⋆" : ""}`;
+    const label = d.name;
     return { text: label, callback_data: `D|${idx}` };
   });
   return { inline_keyboard: chunk(buttons, 2) };

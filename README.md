@@ -93,7 +93,7 @@ Set these in your environment (Vercel Project Settings → Environment Variables
 - ADMIN_CHAT_ID — Optional. A Telegram chat ID for admin pings
 
 Base64 private key (recommended on Vercel):
-- Create GOOGLE_PRIVATE_KEY_BASE64 from your private key file:
+- Create GOOGLE_PRIVATE_KEY_BASE64 from your private key file then copy to clipboard:
   - macOS:
   ```
     pbpaste | base64 | pbcopy

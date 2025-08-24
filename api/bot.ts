@@ -207,12 +207,13 @@ async function handleCallback(cb: TgCallbackQuery) {
       });
 
       if (ok) {
+        const final = drink.price;
+        const savedText = `Saved: ${drink.name} — ${fmtMoney(final)}`;
+        await safeTg(() => tgEditMessageText(chatId, messageId, savedText));
         await safeTg(() =>
-          tgAnswerCallbackQuery(
-            cb.id,
-            `Added ${drink.name} — ${fmtMoney(drink.price)}`,
-          ),
+          tgEditReplyMarkup(chatId, messageId, { inline_keyboard: [] }),
         );
+        await safeTg(() => tgAnswerCallbackQuery(cb.id, ""));
       } else {
         await safeTg(() =>
           tgAnswerCallbackQuery(cb.id, "⚠ couldn't save, try again"),
@@ -263,9 +264,7 @@ async function handleCallback(cb: TgCallbackQuery) {
       const savedText = oatFlag
         ? `Saved: ${drink.name} with oat milk — ${fmtMoney(base)} + ${fmtMoney(OAT_UPCHARGE)} = ${fmtMoney(final)}`
         : `Saved: ${drink.name} — ${fmtMoney(final)}`;
-
       await safeTg(() => tgEditMessageText(chatId, messageId, savedText));
-      // remove buttons by clearing reply markup
       await safeTg(() =>
         tgEditReplyMarkup(chatId, messageId, { inline_keyboard: [] }),
       );

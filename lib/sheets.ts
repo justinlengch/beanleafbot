@@ -172,6 +172,74 @@ export async function ensureSheet(
 }
 
 /**
+ * Parse appended row number from an updatedRange string like "Orders!A42:L42".
+ * Returns -1 if it cannot be determined.
+ */
+function parseAppendedRowNumberFromRange(updatedRange?: string): number {
+  if (!updatedRange) return -1;
+  const m = updatedRange.match(/![A-Z]+(\d+):[A-Z]+(\d+)/i);
+  if (m && m[2]) return parseInt(m[2], 10);
+  const nums = updatedRange.match(/(\d+)/g);
+  if (nums && nums.length) return parseInt(nums[nums.length - 1], 10);
+  return -1;
+}
+
+/**
+ * Returns the numeric sheetId (gid) for a given sheet title.
+ * Use this with deleteRow().
+ */
+export async function getSheetId(
+  auth: SheetsAuth,
+  spreadsheetId: string,
+  title = "Orders",
+): Promise<number | null> {
+  const meta = await auth.sheets.spreadsheets.get(
+    { spreadsheetId, includeGridData: false },
+    { timeout: SHEETS_TIMEOUT_MS },
+  );
+  const sheet = (meta.data.sheets || []).find(
+    (s: any) => s.properties?.title === title,
+  );
+  return sheet?.properties?.sheetId ?? null;
+}
+
+/**
+ * Deletes a single row by its 1-based index within the given sheet.
+ * - sheetId: numeric gid from getSheetId()
+ * - rowIndex1Based: 1-based row number (e.g., 2 deletes the second row)
+ */
+export async function deleteRow(
+  auth: SheetsAuth,
+  spreadsheetId: string,
+  sheetId: number,
+  rowIndex1Based: number,
+): Promise<void> {
+  const start = Math.max(0, rowIndex1Based - 1); // Sheets API is 0-based, end-exclusive
+  const end = start + 1;
+
+  await auth.sheets.spreadsheets.batchUpdate(
+    {
+      spreadsheetId,
+      requestBody: {
+        requests: [
+          {
+            deleteDimension: {
+              range: {
+                sheetId,
+                dimension: "ROWS",
+                startIndex: start,
+                endIndex: end,
+              },
+            },
+          },
+        ],
+      },
+    },
+    { timeout: SHEETS_TIMEOUT_MS },
+  );
+}
+
+/**
  * Appends a single order row.
  *
  * Supports two calling styles for convenience:
@@ -197,7 +265,7 @@ export async function appendOrder(
     row = arg3;
   }
 
-  await auth.sheets.spreadsheets.values.append(
+  const res = await auth.sheets.spreadsheets.values.append(
     {
       spreadsheetId,
       range: `${title}!A1:L1`,

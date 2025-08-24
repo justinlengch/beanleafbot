@@ -27,6 +27,8 @@ import {
   ensureSheet,
   appendOrder,
   type OrderRow,
+  getSheetId,
+  deleteRow,
 } from "../lib/sheets";
 import {
   DRINKS,
@@ -47,6 +49,7 @@ const SHEET_ID = (globalThis as any)?.process?.env?.SHEET_ID || "";
 
 const seenUpdateIds = new LRUSet<number>(1000); // dedupe update_id
 const milkPromptOnce = new OnceGuard<string>(1000); // guard to only show oat choices once per message
+const lastRowByChat = new Map<string, number>(); // key: chatId:userId -> last appended row (1-based)
 
 /* =============================
    Telegram payload types (minimal)
@@ -169,6 +172,28 @@ async function handleMessage(msg: TgMessage) {
 
   if (text === "/list") {
     await safeTg(() => tgSendMessage(chatId, listText()));
+    return;
+  }
+
+  if (text === "/undo") {
+    const key = keyFromParts(chatId, msg.from?.id ?? 0);
+    const last = lastRowByChat.get(key);
+    if (!last) {
+      await safeTg(() => tgSendMessage(chatId, "No recent order to undo."));
+      return;
+    }
+    try {
+      if (!SHEET_ID) throw new Error("SHEET_ID is not set");
+      const auth = await getSheetsAuth();
+      const sheetId = await getSheetId(auth, SHEET_ID, "Orders");
+      if (sheetId == null) throw new Error("Orders sheet not found");
+      await deleteRow(auth, SHEET_ID, sheetId, last);
+      lastRowByChat.delete(key);
+      await safeTg(() => tgSendMessage(chatId, "Undid your last order."));
+    } catch (e: any) {
+      console.error(`undo error: ${e?.message || String(e)}`);
+      await safeTg(() => tgSendMessage(chatId, "⚠ couldn't undo, try again"));
+    }
     return;
   }
 
@@ -326,7 +351,16 @@ async function tryAppendOrder(params: {
 
     const auth = await getSheetsAuth();
     await ensureSheet(auth, SHEET_ID, "Orders");
-    await appendOrder(auth, SHEET_ID, "Orders", row);
+    const appendedRow = await appendOrderAndReturnRow(
+      auth,
+      SHEET_ID,
+      "Orders",
+      row,
+    );
+    if (appendedRow > 0) {
+      const key = keyFromParts(params.chatId, params.user.id);
+      lastRowByChat.set(key, appendedRow);
+    }
 
     return true;
   } catch (err: any) {
@@ -336,6 +370,56 @@ async function tryAppendOrder(params: {
     } catch {}
     return false;
   }
+}
+
+/* =============================
+   Append + row-number helpers (for /undo)
+============================= */
+
+function parseAppendedRowNumberFromRange(updatedRange?: string): number {
+  if (!updatedRange) return -1;
+  const m = updatedRange.match(/![A-Z]+(\d+):[A-Z]+(\d+)/i);
+  if (m && m[2]) return parseInt(m[2], 10);
+  const nums = updatedRange.match(/(\d+)/g);
+  if (nums && nums.length) return parseInt(nums[nums.length - 1], 10);
+  return -1;
+}
+
+async function appendOrderAndReturnRow(
+  auth: any,
+  spreadsheetId: string,
+  title: string,
+  row: OrderRow,
+): Promise<number> {
+  const res = await auth.sheets.spreadsheets.values.append(
+    {
+      spreadsheetId,
+      range: `${title}!A1:L1`,
+      valueInputOption: "RAW",
+      requestBody: {
+        values: [
+          [
+            row.timestamp,
+            row.chatId,
+            row.userId,
+            row.username,
+            row.fullName,
+            row.drink,
+            row.price,
+            row.qty,
+            row.total,
+            row.oatMilk,
+            row.messageId,
+            row.callbackId,
+          ],
+        ],
+      },
+    },
+    { timeout: 8000 },
+  );
+  const updatedRange =
+    res && res.data && res.data.updates && res.data.updates.updatedRange;
+  return parseAppendedRowNumberFromRange(updatedRange as string | undefined);
 }
 
 /* =============================

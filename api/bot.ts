@@ -38,6 +38,7 @@ import {
   buildOatChoice,
   listText,
   ensureMenuLoadedOnce,
+  buildConfirmKeyboard,
 } from "../lib/menu";
 import { LRUSet, OnceGuard, keyFromParts } from "../lib/idempotency";
 
@@ -221,32 +222,10 @@ async function handleCallback(cb: TgCallbackQuery) {
     }
 
     if (!drink.oat) {
-      // Append order immediately
-      const ok = await tryAppendOrder({
-        chatId,
-        user: cb.from,
-        messageId,
-        callbackId: cb.id,
-        drinkIdx: idx,
-        oat: false,
-      });
-
-      if (ok) {
-        const final = drink.price;
-        const savedText = `Saved: ${drink.name} — ${fmtMoney(final)}`;
-        await safeTg(() => tgEditMessageText(chatId, messageId, savedText));
-        await safeTg(() =>
-          tgEditReplyMarkup(chatId, messageId, { inline_keyboard: [] }),
-        );
-        await safeTg(() => tgAnswerCallbackQuery(cb.id, ""));
-      } else {
-        await safeTg(() =>
-          tgAnswerCallbackQuery(cb.id, "⚠ couldn't save, try again"),
-        );
-        await safeTg(() =>
-          tgSendMessage(chatId, "⚠ couldn't save, try again"),
-        );
-      }
+      // Show confirmation keyboard for non-oat drink
+      const confirm = buildConfirmKeyboard(idx, false);
+      await safeTg(() => tgEditReplyMarkup(chatId, messageId, confirm));
+      await safeTg(() => tgAnswerCallbackQuery(cb.id, ""));
       return;
     }
 
@@ -269,6 +248,24 @@ async function handleCallback(cb: TgCallbackQuery) {
     const oatFlag = parts[2] === "1";
     const drink = DRINKS[idx as number];
 
+    if (!Number.isFinite(idx) || !drink) {
+      await safeTg(() => tgAnswerCallbackQuery(cb.id, ""));
+      return;
+    }
+
+    // Show confirmation keyboard for chosen oat option (regular or with oat)
+    const confirm = buildConfirmKeyboard(idx, oatFlag);
+    await safeTg(() => tgEditReplyMarkup(chatId, messageId, confirm));
+    await safeTg(() => tgAnswerCallbackQuery(cb.id, ""));
+    return;
+  }
+
+  // Handle final confirmation: Y|<idx>|<oatFlag>
+  if (data.startsWith("Y|")) {
+    const parts = data.split("|");
+    const idx = Number(parts[1]);
+    const oatFlag = parts[2] === "1";
+    const drink = DRINKS[idx as number];
     if (!Number.isFinite(idx) || !drink) {
       await safeTg(() => tgAnswerCallbackQuery(cb.id, ""));
       return;
@@ -300,6 +297,17 @@ async function handleCallback(cb: TgCallbackQuery) {
       );
       await safeTg(() => tgSendMessage(chatId, "⚠ couldn't save, try again"));
     }
+    return;
+  }
+
+  // Handle cancel: N|<idx> — restore drinks menu and allow future milk prompt
+  if (data.startsWith("N|")) {
+    const parts = data.split("|");
+    const idx = Number(parts[1]);
+    // Clear once-guard so milk choices can be shown again later for this message
+    milkPromptOnce.delete(keyFromParts(chatId, messageId, idx));
+    await safeTg(() => tgEditReplyMarkup(chatId, messageId, buildMainMenu()));
+    await safeTg(() => tgAnswerCallbackQuery(cb.id, ""));
     return;
   }
 

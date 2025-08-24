@@ -202,3 +202,27 @@ export function chunk<T>(arr: readonly T[], size: number): T[][] {
   }
   return out;
 }
+
+/**
+ * Build a two-button confirmation keyboard for finalizing an order.
+ * - Confirm: proceeds with logging the order
+ * - Cancel: aborts and lets the caller decide what to show next
+ *
+ * callback_data:
+ * - Confirm: "Y|<idx>|<oatFlag 0|1>"
+ * - Cancel:  "N|<idx>"
+ */
+export function buildConfirmKeyboard(
+  idx: number,
+  oat: boolean,
+): InlineKeyboardMarkup {
+  const confirm: InlineKeyboardButton = {
+    text: "✅ Confirm",
+    callback_data: `Y|${idx}|${oat ? 1 : 0}`,
+  };
+  const cancel: InlineKeyboardButton = {
+    text: "↩ Cancel",
+    callback_data: `N|${idx}`,
+  };
+  return { inline_keyboard: [[confirm, cancel]] };
+}

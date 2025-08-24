@@ -222,8 +222,10 @@ async function handleCallback(cb: TgCallbackQuery) {
     }
 
     if (!drink.oat) {
-      // Show confirmation keyboard for non-oat drink
+      // Show confirmation keyboard for non-oat drink (with explicit text)
       const confirm = buildConfirmKeyboard(idx, false);
+      const confirmText = `Confirm: ${drink.name} — ${fmtMoney(drink.price)}`;
+      await safeTg(() => tgEditMessageText(chatId, messageId, confirmText));
       await safeTg(() => tgEditReplyMarkup(chatId, messageId, confirm));
       await safeTg(() => tgAnswerCallbackQuery(cb.id, ""));
       return;
@@ -253,8 +255,14 @@ async function handleCallback(cb: TgCallbackQuery) {
       return;
     }
 
-    // Show confirmation keyboard for chosen oat option (regular or with oat)
+    // Show confirmation keyboard for chosen oat option (regular or with oat) with explicit text
     const confirm = buildConfirmKeyboard(idx, oatFlag);
+    const base = drink.price;
+    const final = oatFlag ? base + OAT_UPCHARGE : base;
+    const confirmText = oatFlag
+      ? `Confirm: ${drink.name} with oat milk — ${fmtMoney(base)} + ${fmtMoney(OAT_UPCHARGE)} = ${fmtMoney(final)}`
+      : `Confirm: ${drink.name} — ${fmtMoney(final)}`;
+    await safeTg(() => tgEditMessageText(chatId, messageId, confirmText));
     await safeTg(() => tgEditReplyMarkup(chatId, messageId, confirm));
     await safeTg(() => tgAnswerCallbackQuery(cb.id, ""));
     return;
@@ -306,7 +314,9 @@ async function handleCallback(cb: TgCallbackQuery) {
     const idx = Number(parts[1]);
     // Clear once-guard so milk choices can be shown again later for this message
     milkPromptOnce.delete(keyFromParts(chatId, messageId, idx));
-    await safeTg(() => tgEditReplyMarkup(chatId, messageId, buildMainMenu()));
+    const menu = buildMainMenu();
+    await safeTg(() => tgEditMessageText(chatId, messageId, "Choose a drink:"));
+    await safeTg(() => tgEditReplyMarkup(chatId, messageId, menu));
     await safeTg(() => tgAnswerCallbackQuery(cb.id, ""));
     return;
   }

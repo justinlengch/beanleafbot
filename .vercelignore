@@ -1,0 +1,69 @@
+# Keep deployment lean and secure. This file controls which files Vercel uploads.
+# Syntax is like .gitignore
+
+# Version control and project metadata
+.git
+.gitignore
+.gitattributes
+.github/
+.vercel/
+
+# Editor/IDE settings
+.vscode/
+.idea/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Environment files (set real values in Vercel project settings)
+.env
+.env.*
+!.env.example
+
+# Dependencies and caches (Vercel will install from package.json/lockfile)
+node_modules/
+bower_components/
+.pnp.*
+.npm/
+.cache/
+node_modules/.cache/
+
+# Yarn (Berry) - keep required subfolders if used
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.yarnrc*
+.pnpm-debug.log*
+.npmrc
+
+# Logs and reports
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+coverage/
+.nyc_output/
+
+# Build outputs (not required for Vercel serverless TS routes)
+dist/
+build/
+out/
+.tmp/
+tmp/
+
+# Tests and fixtures
+__tests__/
+tests/
+test/
+**/*.test.*
+**/*.spec.*
+
+# Misc
+*.swp
+*.swo

@@ -1,0 +1,17 @@
+{
+  "name": "beanleafbot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Telegram to Google Sheets bot (Vercel webhook, Node 18+)",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "google-auth-library": "^9.14.2",
+    "googleapis": "^144.0.0"
+  },
+  "license": "MIT"
+}

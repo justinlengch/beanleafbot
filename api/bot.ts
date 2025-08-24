@@ -51,6 +51,10 @@ const SHEET_ID = (globalThis as any)?.process?.env?.SHEET_ID || "";
 const seenUpdateIds = new LRUSet<number>(1000); // dedupe update_id
 const milkPromptOnce = new OnceGuard<string>(1000); // guard to only show oat choices once per message
 const lastRowByChat = new Map<string, number>(); // key: chatId:userId -> last appended row (1-based)
+const lastOrderDetailsByChat = new Map<
+  string,
+  { drinkName: string; oatMilk: boolean }
+>();
 
 /* =============================
    Telegram payload types (minimal)
@@ -189,8 +193,15 @@ async function handleMessage(msg: TgMessage) {
       const sheetId = await getSheetId(auth, SHEET_ID, "Orders");
       if (sheetId == null) throw new Error("Orders sheet not found");
       await deleteRow(auth, SHEET_ID, sheetId, last);
+      const details = lastOrderDetailsByChat.get(key);
       lastRowByChat.delete(key);
-      await safeTg(() => tgSendMessage(chatId, "Undid your last order."));
+      lastOrderDetailsByChat.delete(key);
+      const undoneText = details
+        ? details.oatMilk
+          ? `Undid: ${details.drinkName} with oat milk.`
+          : `Undid: ${details.drinkName}.`
+        : "Undid your last order.";
+      await safeTg(() => tgSendMessage(chatId, undoneText));
     } catch (e: any) {
       console.error(`undo error: ${e?.message || String(e)}`);
       await safeTg(() => tgSendMessage(chatId, "⚠ couldn't undo, try again"));
@@ -378,6 +389,10 @@ async function tryAppendOrder(params: {
     if (appendedRow > 0) {
       const key = keyFromParts(params.chatId, params.user.id);
       lastRowByChat.set(key, appendedRow);
+      lastOrderDetailsByChat.set(key, {
+        drinkName: drink.name,
+        oatMilk: params.oat,
+      });
     }
 
     return true;

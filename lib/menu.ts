@@ -150,7 +150,7 @@ export function drinkByIndex(idx: number): Drink | undefined {
 
 /**
  * Build the main 2-column inline keyboard with drink choices.
- * Label: "Name ($X.XX)" and add " ⋆" for oat-eligible.
+ * Label: "Drink Name"
  * callback_data: D|<idx>
  */
 export function buildMainMenu(): InlineKeyboardMarkup {
@@ -164,19 +164,19 @@ export function buildMainMenu(): InlineKeyboardMarkup {
 /**
  * Build the two-button oat choice keyboard for a given drink index.
  * Buttons:
- * - Regular (price) => C|idx|0
- * - With Oat (+$0.50 → final) => C|idx|1
+ * - Dairy Milk => C|idx|0
+ * - Oat Milk   => C|idx|1
  */
 export function buildOatChoice(idx: number): InlineKeyboardMarkup {
   const drink = drinkByIndex(idx);
   if (!drink) return { inline_keyboard: [] };
   const regular: InlineKeyboardButton = {
-    text: `Regular (${fmtMoney(drink.price)})`,
+    text: `Dairy Milk`,
     callback_data: `C|${idx}|0`,
   };
   const withOatPrice = totalWithOat(drink.price, true);
   const withOat: InlineKeyboardButton = {
-    text: `With Oat (+${fmtMoney(OAT_UPCHARGE)} → ${fmtMoney(withOatPrice)})`,
+    text: `Oat Milk`,
     callback_data: `C|${idx}|1`,
   };
   return { inline_keyboard: [[regular, withOat]] };

@@ -8,7 +8,7 @@
  *
  * Env required:
  * - GOOGLE_SERVICE_ACCOUNT_EMAIL
- * - GOOGLE_PRIVATE_KEY (handle \n correctly)
+ * - Either GOOGLE_PRIVATE_KEY (with \n) or GOOGLE_PRIVATE_KEY_BASE64 (recommended on Vercel)
  *
  * Notes:
  * - Uses googleapis + google-auth-library via JWT service account.
@@ -31,6 +31,8 @@ const SVC_EMAIL =
   (globalThis as any)?.process?.env?.GOOGLE_SERVICE_ACCOUNT_EMAIL || "";
 const RAW_PRIVATE_KEY =
   (globalThis as any)?.process?.env?.GOOGLE_PRIVATE_KEY || "";
+const RAW_PRIVATE_KEY_BASE64 =
+  (globalThis as any)?.process?.env?.GOOGLE_PRIVATE_KEY_BASE64 || "";
 
 /**
  * Row schema for the Orders sheet.
@@ -57,9 +59,35 @@ export type SheetsAuth = {
   sheets: sheets_v4.Sheets;
 };
 
-function normalizePrivateKey(key: string): string {
-  // Vercel and many envs store newlines escaped
-  return key.replace(/\\n/g, "\n");
+function normalizePrivateKeyText(key: string): string {
+  // Handle surrounding quotes and escaped newlines
+  let k = (key || "").trim();
+  if (
+    (k.startsWith('"') && k.endsWith('"')) ||
+    (k.startsWith("'") && k.endsWith("'"))
+  ) {
+    k = k.slice(1, -1);
+  }
+  // Convert literal \n into actual newlines
+  k = k.replace(/\\n/g, "\n");
+  return k;
+}
+
+/**
+ * Prefer GOOGLE_PRIVATE_KEY_BASE64 when present; otherwise fall back to GOOGLE_PRIVATE_KEY.
+ * This avoids issues with newline handling in certain deployment UIs.
+ */
+function getPrivateKey(): string {
+  const b64 = RAW_PRIVATE_KEY_BASE64 && RAW_PRIVATE_KEY_BASE64.trim();
+  if (b64) {
+    try {
+      const decoded = Buffer.from(b64, "base64").toString("utf8");
+      return decoded;
+    } catch {
+      // fall through to text normalization
+    }
+  }
+  return normalizePrivateKeyText(RAW_PRIVATE_KEY || "");
 }
 
 /**
@@ -67,11 +95,17 @@ function normalizePrivateKey(key: string): string {
  */
 export async function getSheetsAuth(): Promise<SheetsAuth> {
   if (!SVC_EMAIL) throw new Error("GOOGLE_SERVICE_ACCOUNT_EMAIL is not set");
-  if (!RAW_PRIVATE_KEY) throw new Error("GOOGLE_PRIVATE_KEY is not set");
+
+  const key = getPrivateKey();
+  if (!key) {
+    throw new Error(
+      "GOOGLE_PRIVATE_KEY or GOOGLE_PRIVATE_KEY_BASE64 is not set",
+    );
+  }
 
   const jwt = new google.auth.JWT({
     email: SVC_EMAIL,
-    key: normalizePrivateKey(RAW_PRIVATE_KEY),
+    key,
     scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   });
 

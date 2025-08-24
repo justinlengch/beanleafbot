@@ -3,9 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "description": "Telegram to Google Sheets bot (Vercel webhook, Node 18+)",
-  "engines": {
-    "node": ">=18"
-  },
   "scripts": {
     "dev": "vercel dev"
   },
@@ -13,5 +10,9 @@
     "google-auth-library": "^9.14.2",
     "googleapis": "^144.0.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "typescript": "^5.9.2"
+  }
 }

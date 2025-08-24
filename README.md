@@ -88,8 +88,23 @@ Set these in your environment (Vercel Project Settings → Environment Variables
 - BOT_TOKEN — Telegram bot token from @BotFather
 - SHEET_ID — The spreadsheet ID (not the full URL)
 - GOOGLE_SERVICE_ACCOUNT_EMAIL — The service account’s client_email
-- GOOGLE_PRIVATE_KEY — The service account’s private key (use \n for newlines)
+- GOOGLE_PRIVATE_KEY_BASE64 — Base64-encoded service account private key (recommended on Vercel), or
+- GOOGLE_PRIVATE_KEY — The service account’s private key with literal \n newlines
 - ADMIN_CHAT_ID — Optional. A Telegram chat ID for admin pings
+
+Base64 private key (recommended on Vercel):
+- Create GOOGLE_PRIVATE_KEY_BASE64 from your private key file:
+  - macOS: pbpaste | base64 | pbcopy   # copy key to clipboard first, then this copies base64 back to clipboard
+  - Linux: base64 -w0 key.pem          # or: cat key.pem | base64 -w0
+  - Windows (PowerShell): [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content key.pem -Raw)))
+- In Vercel → Project → Settings → Environment Variables:
+  - Set GOOGLE_PRIVATE_KEY_BASE64 to the base64 string (no surrounding quotes).
+  - Set GOOGLE_SERVICE_ACCOUNT_EMAIL to client_email from the service account JSON.
+- The app will decode and use the key automatically.
+
+If you prefer GOOGLE_PRIVATE_KEY (legacy):
+- Use the literal \n approach only in environments where it’s reliable (local .env etc).
+- In Vercel UI, prefer GOOGLE_PRIVATE_KEY_BASE64 to avoid newline handling issues.
 
 Example .env (local):
 ```
@@ -99,7 +114,11 @@ GOOGLE_SERVICE_ACCOUNT_EMAIL=your-svc@your-project.iam.gserviceaccount.com
 GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0B...\n-----END PRIVATE KEY-----\n"
 ADMIN_CHAT_ID=123456789
 ```
-Note: Wrap the private key in quotes if your shell expands newlines.
+Note:
+- Prefer GOOGLE_PRIVATE_KEY_BASE64 on Vercel to avoid newline issues.
+- For local .env, you can use either:
+  - GOOGLE_PRIVATE_KEY_BASE64=<your_base64_key>
+  - or GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n" (quoted if your shell expands newlines)
 
 ---
 

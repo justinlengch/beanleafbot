@@ -237,3 +237,57 @@ export async function tgNotifyAdmin(
     // Swallow errors to avoid cascading failures.
   }
 }
+
+export type TgBotCommand = {
+  command: string;
+  description: string;
+};
+
+export type TgBotCommandScope =
+  | { type: "default" }
+  | { type: "all_private_chats" }
+  | { type: "all_group_chats" }
+  | { type: "all_chat_administrators" }
+  | { type: "chat"; chat_id: number | string }
+  | { type: "chat_administrators"; chat_id: number | string }
+  | { type: "chat_member"; chat_id: number | string; user_id: number };
+
+/**
+ * Set the list of bot commands. Optionally scope to a chat, user, or language.
+ * See: https://core.telegram.org/bots/api#setmycommands
+ */
+export function tgSetMyCommands(
+  commands: TgBotCommand[],
+  scope?: TgBotCommandScope,
+  language_code?: string,
+  options?: { timeoutMs?: number },
+) {
+  return callTelegram(
+    "setMyCommands",
+    {
+      commands,
+      scope,
+      language_code,
+    },
+    options?.timeoutMs,
+  );
+}
+
+/**
+ * Delete the list of bot commands for the given scope/language.
+ * See: https://core.telegram.org/bots/api#deletemycommands
+ */
+export function tgDeleteMyCommands(
+  scope?: TgBotCommandScope,
+  language_code?: string,
+  options?: { timeoutMs?: number },
+) {
+  return callTelegram(
+    "deleteMyCommands",
+    {
+      scope,
+      language_code,
+    },
+    options?.timeoutMs,
+  );
+}

@@ -22,6 +22,8 @@ import {
   tgAnswerCallbackQuery,
   tgDeleteMessage,
   tgNotifyAdmin,
+  tgSetMyCommands,
+  tgDeleteMyCommands,
 } from "../lib/telegram";
 import {
   getSheetsAuth,
@@ -50,6 +52,16 @@ import { LRUSet, OnceGuard, keyFromParts } from "../lib/idempotency";
 ============================= */
 
 const SHEET_ID = (globalThis as any)?.process?.env?.SHEET_ID || "";
+const PAY_URL = (globalThis as any)?.process?.env?.PAY_URL || "";
+const DEFAULT_COMMANDS = [
+  { command: "menu", description: "View menu" },
+  { command: "pay", description: "Pay for drinks" },
+];
+const APPROVED_EXTRA_COMMANDS = [
+  { command: "log", description: "Place an order" },
+  { command: "undo", description: "Undo last order" },
+];
+let __defaultCommandsSet = false;
 
 const seenUpdateIds = new LRUSet<number>(1000); // dedupe update_id
 const milkPromptOnce = new OnceGuard<string>(1000); // guard to only show oat choices once per message
@@ -193,6 +205,40 @@ async function handleMessage(msg: TgMessage) {
   const chatId = msg.chat.id;
   const text = (msg.text || "").trim();
 
+  // Ensure default commands for everyone once
+  if (!__defaultCommandsSet) {
+    await safeTg(() => tgSetMyCommands(DEFAULT_COMMANDS, { type: "default" }));
+    __defaultCommandsSet = true;
+  }
+
+  // Scope commands per user based on approval in this chat
+  const __allowed = (
+    ((globalThis as any)?.process?.env?.APPROVED_USERNAMES as string) || ""
+  )
+    .split(",")
+    .map((u: string) => u.trim().replace(/^@/, "").toLowerCase())
+    .filter(Boolean);
+  const __uname = ((msg.from?.username || "") as string).toLowerCase();
+  if (msg.from?.id && __uname) {
+    if (__allowed.includes(__uname)) {
+      await safeTg(() =>
+        tgSetMyCommands([...DEFAULT_COMMANDS, ...APPROVED_EXTRA_COMMANDS], {
+          type: "chat_member",
+          chat_id: chatId,
+          user_id: msg.from!.id,
+        }),
+      );
+    } else {
+      await safeTg(() =>
+        tgDeleteMyCommands({
+          type: "chat_member",
+          chat_id: chatId,
+          user_id: msg.from!.id,
+        }),
+      );
+    }
+  }
+
   // If a numeric keypad is active for this user, handle digit/Clear/Done
   const padKey = keyFromParts(chatId, msg.from?.id ?? 0);
   const pad = qtyPadByUser.get(padKey);
@@ -300,6 +346,26 @@ async function handleMessage(msg: TgMessage) {
 
   if (text === "/menu") {
     await safeTg(() => tgSendMessage(chatId, listText()));
+    return;
+  }
+
+  if (text === "/pay") {
+    if (!PAY_URL) {
+      await safeTg(() =>
+        tgSendMessage(chatId, "Payment link is not configured."),
+      );
+      return;
+    }
+    const payKb = {
+      inline_keyboard: [[{ text: "Pay now", url: PAY_URL }]],
+    } as any;
+    await safeTg(() =>
+      tgSendMessage(
+        chatId,
+        `Pay for your drinks using the link below:\n${PAY_URL}`,
+        payKb,
+      ),
+    );
     return;
   }
 

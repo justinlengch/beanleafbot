@@ -21,6 +21,7 @@ export type Drink = {
 };
 
 export const OAT_UPCHARGE = 0.5;
+export const BYOC_DISCOUNT = 0.5;
 
 export let DRINKS: Drink[] = [
   { name: "Americano", price: 3.0, oat: false },
@@ -174,12 +175,34 @@ export function buildOatChoice(idx: number): InlineKeyboardMarkup {
     text: `Dairy Milk`,
     callback_data: `C|${idx}|0`,
   };
-  const withOatPrice = totalWithOat(drink.price, true);
   const withOat: InlineKeyboardButton = {
     text: `Oat Milk`,
     callback_data: `C|${idx}|1`,
   };
   return { inline_keyboard: [[regular, withOat]] };
+}
+
+/**
+ * Build a two-button BYOC choice keyboard for a given drink index and oat flag.
+ * Buttons:
+ * - Use shop cup     => B|idx|oat|0
+ * - Bring your own   => B|idx|oat|1
+ */
+export function buildByocChoice(
+  idx: number,
+  oat: boolean,
+): InlineKeyboardMarkup {
+  const drink = drinkByIndex(idx);
+  if (!drink) return { inline_keyboard: [] };
+  const noByoc: InlineKeyboardButton = {
+    text: `No`,
+    callback_data: `B|${idx}|${oat ? 1 : 0}|0`,
+  };
+  const withByoc: InlineKeyboardButton = {
+    text: `Yes`,
+    callback_data: `B|${idx}|${oat ? 1 : 0}|1`,
+  };
+  return { inline_keyboard: [[noByoc, withByoc]] };
 }
 
 /**
@@ -209,16 +232,17 @@ export function chunk<T>(arr: readonly T[], size: number): T[][] {
  * - Cancel: aborts and lets the caller decide what to show next
  *
  * callback_data:
- * - Confirm: "Y|<idx>|<oatFlag 0|1>"
+ * - Confirm: "Y|<idx>|<oatFlag 0|1>|<byocFlag 0|1>"
  * - Cancel:  "N|<idx>"
  */
 export function buildConfirmKeyboard(
   idx: number,
   oat: boolean,
+  byoc: boolean = false,
 ): InlineKeyboardMarkup {
   const confirm: InlineKeyboardButton = {
     text: "✅ Confirm",
-    callback_data: `Y|${idx}|${oat ? 1 : 0}`,
+    callback_data: `Y|${idx}|${oat ? 1 : 0}|${byoc ? 1 : 0}`,
   };
   const cancel: InlineKeyboardButton = {
     text: "↩ Cancel",

@@ -202,7 +202,7 @@ export function buildByocChoice(
     text: `Yes`,
     callback_data: `B|${idx}|${oat ? 1 : 0}|1`,
   };
-  return { inline_keyboard: [[noByoc, withByoc]] };
+  return { inline_keyboard: [[withByoc, noByoc]] };
 }
 
 /**

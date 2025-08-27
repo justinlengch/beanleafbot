@@ -236,7 +236,7 @@ export function chunk<T>(arr: readonly T[], size: number): T[][] {
  * - Decrement: "Q|<idx>|<oatFlag 0|1>|<byocFlag 0|1>|dec|<qty>"
  * - No-op label: "Q|<idx>|<oatFlag 0|1>|<byocFlag 0|1>|noop|<qty>"
  * - Increment: "Q|<idx>|<oatFlag 0|1>|<byocFlag 0|1>|inc|<qty>"
- * - Confirm:   "Y|<idx>|<oatFlag 0|1>|<byocFlag 0|1>|<qty>"
+ * - Confirm:   "Y|<idx>|<oatFlag 0|1>|<byocFlag 0|1>"
  * - Cancel:    "N|<idx>"
  */
 export function buildConfirmKeyboard(
@@ -259,7 +259,7 @@ export function buildConfirmKeyboard(
   };
   const confirm: InlineKeyboardButton = {
     text: "✅ Confirm",
-    callback_data: `Y|${idx}|${oat ? 1 : 0}|${byoc ? 1 : 0}|${qty}`,
+    callback_data: `Y|${idx}|${oat ? 1 : 0}|${byoc ? 1 : 0}`,
   };
   const cancel: InlineKeyboardButton = {
     text: "↩ Cancel",

@@ -57,6 +57,7 @@ const lastOrderDetailsByChat = new Map<
   string,
   { drinkName: string; oatMilk: boolean; byoc: boolean; qty: number }
 >();
+const pendingQtyByMessage = new Map<string, number>();
 
 /* =============================
    Telegram payload types (minimal)
@@ -313,6 +314,8 @@ async function handleCallback(cb: TgCallbackQuery) {
       return;
     }
     const confirm = buildConfirmKeyboard(idx, oatFlag, byocFlag, 1);
+    const qtyKey = keyFromParts(chatId, messageId, idx, oatFlag, byocFlag);
+    pendingQtyByMessage.set(qtyKey, 1);
     const base = drink.price;
     const up = oatFlag ? OAT_UPCHARGE : 0;
     const disc = byocFlag ? BYOC_DISCOUNT : 0;
@@ -337,31 +340,22 @@ async function handleCallback(cb: TgCallbackQuery) {
     const oatFlag = parts[2] === "1";
     const byocFlag = parts[3] === "1";
     const op = parts[4] || "noop";
-    const qty = Math.max(1, Number(parts[5]) || 1);
     const drink = DRINKS[idx as number];
     if (!Number.isFinite(idx) || !drink) {
       await safeTg(() => tgAnswerCallbackQuery(cb.id, ""));
       return;
     }
+    // Use in-memory qty per message; do not edit message on +/- for speed
+    const qtyKey = keyFromParts(chatId, messageId, idx, oatFlag, byocFlag);
+    const current = Math.max(1, Number(pendingQtyByMessage.get(qtyKey) || 1));
     const newQty =
-      op === "inc" ? qty + 1 : op === "dec" ? Math.max(1, qty - 1) : qty;
-    const base = drink.price;
-    const up = oatFlag ? OAT_UPCHARGE : 0;
-    const disc = byocFlag ? BYOC_DISCOUNT : 0;
-    const unit = base + up - disc;
-    const total = unit * newQty;
-    const confirm = buildConfirmKeyboard(idx, oatFlag, byocFlag, newQty);
-    const confirmText =
-      oatFlag && byocFlag
-        ? `Confirm: ${drink.name} with oat milk (BYOC) — ${fmtMoney(base)} + ${fmtMoney(OAT_UPCHARGE)} − ${fmtMoney(BYOC_DISCOUNT)} = ${fmtMoney(unit)}${newQty > 1 ? ` × ${newQty} = ${fmtMoney(total)}` : ""}`
-        : oatFlag && !byocFlag
-          ? `Confirm: ${drink.name} with oat milk — ${fmtMoney(base)} + ${fmtMoney(OAT_UPCHARGE)} = ${fmtMoney(unit)}${newQty > 1 ? ` × ${newQty} = ${fmtMoney(total)}` : ""}`
-          : !oatFlag && byocFlag
-            ? `Confirm: ${drink.name} (BYOC) — ${fmtMoney(base)} − ${fmtMoney(BYOC_DISCOUNT)} = ${fmtMoney(unit)}${newQty > 1 ? ` × ${newQty} = ${fmtMoney(total)}` : ""}`
-            : `Confirm: ${drink.name} — ${fmtMoney(unit)}${newQty > 1 ? ` × ${newQty} = ${fmtMoney(total)}` : ""}`;
-    await safeTg(() => tgEditMessageText(chatId, messageId, confirmText));
-    await safeTg(() => tgEditReplyMarkup(chatId, messageId, confirm));
-    await safeTg(() => tgAnswerCallbackQuery(cb.id, ""));
+      op === "inc"
+        ? current + 1
+        : op === "dec"
+          ? Math.max(1, current - 1)
+          : current;
+    pendingQtyByMessage.set(qtyKey, newQty);
+    await safeTg(() => tgAnswerCallbackQuery(cb.id, `x${newQty}`));
     return;
   }
 
@@ -371,7 +365,12 @@ async function handleCallback(cb: TgCallbackQuery) {
     const idx = Number(parts[1]);
     const oatFlag = parts[2] === "1";
     const byocFlag = parts[3] === "1";
-    const qty = Math.max(1, Number(parts[4]) || 1);
+    const qtyKey = keyFromParts(chatId, messageId, idx, oatFlag, byocFlag);
+    const qtyFromMem = Math.max(
+      1,
+      Number(pendingQtyByMessage.get(qtyKey) || 0),
+    );
+    const qty = qtyFromMem || Math.max(1, Number(parts[4]) || 1);
     const drink = DRINKS[idx as number];
     if (!Number.isFinite(idx) || !drink) {
       await safeTg(() => tgAnswerCallbackQuery(cb.id, ""));
@@ -407,6 +406,7 @@ async function handleCallback(cb: TgCallbackQuery) {
       await safeTg(() =>
         tgEditReplyMarkup(chatId, messageId, { inline_keyboard: [] }),
       );
+      pendingQtyByMessage.delete(qtyKey);
       await safeTg(() => tgAnswerCallbackQuery(cb.id, ""));
     } else {
       await safeTg(() =>

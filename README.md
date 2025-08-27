@@ -16,6 +16,7 @@ Highlights:
   - /log → inline keyboard of drinks (2 per row)
   - /menu → bullet list with prices, marks “(oat opt.)” when available
   - /undo → removes the last order from the Orders sheet (if any)
+- Access control: Only approved usernames (APPROVED_USERNAMES) can use /log and /undo; all users can use /menu.
 - Idempotency:
   - In-memory LRU for update_id to ignore retries
   - One-time guard per message to not re-show milk choices
@@ -93,6 +94,7 @@ SHEET_ID=1x2y3z...spreadsheetid
 GOOGLE_SERVICE_ACCOUNT_EMAIL=your-svc@your-project.iam.gserviceaccount.com
 GOOGLE_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0B...\n-----END PRIVATE KEY-----\n
 ADMIN_CHAT_ID=123456789
+APPROVED_USERNAMES=alice,bob
 ```
 Note:
 - Remove the outer surrounding quotes (") for GOOGLE_PRIVATE_KEY on Vercel and ignore the warning about unsafe characters. The '\n' will be converted to real newlines in code.

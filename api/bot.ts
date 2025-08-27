@@ -275,6 +275,23 @@ async function handleMessage(msg: TgMessage) {
   }
 
   if (text === "/log") {
+    const __allowed = (
+      ((globalThis as any)?.process?.env?.APPROVED_USERNAMES as string) || ""
+    )
+      .split(",")
+      .map((u: string) => u.trim().replace(/^@/, "").toLowerCase())
+      .filter(Boolean);
+    const __uname = ((msg.from?.username || "") as string).toLowerCase();
+    if (!__uname || !__allowed.includes(__uname)) {
+      await safeTg(() =>
+        tgSendMessage(
+          chatId,
+          "Not authorized. Use /menu to view our drinks menu!",
+        ),
+      );
+      return;
+    }
+
     await ensureMenuLoadedOnce();
     const menu = buildMainMenu();
     await safeTg(() => tgSendMessage(chatId, "Choose a drink:", menu));
@@ -287,6 +304,23 @@ async function handleMessage(msg: TgMessage) {
   }
 
   if (text === "/undo") {
+    const __allowed = (
+      ((globalThis as any)?.process?.env?.APPROVED_USERNAMES as string) || ""
+    )
+      .split(",")
+      .map((u: string) => u.trim().replace(/^@/, "").toLowerCase())
+      .filter(Boolean);
+    const __uname = ((msg.from?.username || "") as string).toLowerCase();
+    if (!__uname || !__allowed.includes(__uname)) {
+      await safeTg(() =>
+        tgSendMessage(
+          chatId,
+          "Not authorized. Use /menu to view our drinks menu!",
+        ),
+      );
+      return;
+    }
+
     const key = keyFromParts(chatId, msg.from?.id ?? 0);
     const last = lastRowByChat.get(key);
     if (!last) {
@@ -337,6 +371,20 @@ async function handleCallback(cb: TgCallbackQuery) {
     await safeTg(() => tgAnswerCallbackQuery(cb.id, ""));
     return;
   }
+
+  // Only allow approved usernames to interact with ordering callbacks
+  const __allowed = (
+    ((globalThis as any)?.process?.env?.APPROVED_USERNAMES as string) || ""
+  )
+    .split(",")
+    .map((u: string) => u.trim().replace(/^@/, "").toLowerCase())
+    .filter(Boolean);
+  const __caller = ((cb.from?.username || "") as string).toLowerCase();
+  if (!__caller || !__allowed.includes(__caller)) {
+    await safeTg(() => tgAnswerCallbackQuery(cb.id, "Not authorized"));
+    return;
+  }
+
   await ensureMenuLoadedOnce();
   const chatId = msg.chat.id;
   const messageId = msg.message_id;

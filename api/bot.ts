@@ -58,6 +58,10 @@ const lastOrderDetailsByChat = new Map<
   { drinkName: string; oatMilk: boolean; byoc: boolean; qty: number }
 >();
 const pendingQtyByMessage = new Map<string, number>();
+const awaitQtyByUser = new Map<
+  string,
+  { messageId: number; idx: number; oat: boolean; byoc: boolean }
+>();
 
 /* =============================
    Telegram payload types (minimal)
@@ -181,6 +185,65 @@ export default async function handler(req: any, res: any) {
 async function handleMessage(msg: TgMessage) {
   const chatId = msg.chat.id;
   const text = (msg.text || "").trim();
+
+  // If awaiting a typed quantity from this user, parse it and update the confirm UI
+  const awaitKey = keyFromParts(chatId, msg.from?.id ?? 0);
+  const pendingTyped = awaitQtyByUser.get(awaitKey);
+  if (pendingTyped) {
+    const n = Number(text);
+    const qty = Number.isFinite(n)
+      ? Math.max(1, Math.min(20, Math.floor(n)))
+      : NaN;
+    if (!Number.isFinite(qty)) {
+      await safeTg(() =>
+        tgSendMessage(chatId, "Please send a number between 1 and 20."),
+      );
+      return;
+    }
+    const drink = DRINKS[pendingTyped.idx as number];
+    if (!drink) {
+      awaitQtyByUser.delete(awaitKey);
+      return;
+    }
+    const qtyKey = keyFromParts(
+      chatId,
+      pendingTyped.messageId,
+      pendingTyped.idx,
+      pendingTyped.oat,
+      pendingTyped.byoc,
+    );
+    pendingQtyByMessage.set(qtyKey, qty);
+
+    const base = drink.price;
+    const up = pendingTyped.oat ? OAT_UPCHARGE : 0;
+    const disc = pendingTyped.byoc ? BYOC_DISCOUNT : 0;
+    const unit = base + up - disc;
+    const total = unit * qty;
+
+    const confirm = buildConfirmKeyboard(
+      pendingTyped.idx,
+      pendingTyped.oat,
+      pendingTyped.byoc,
+      qty,
+    );
+    const confirmText =
+      pendingTyped.oat && pendingTyped.byoc
+        ? `Confirm: ${drink.name} with oat milk (BYOC) — ${fmtMoney(base)} + ${fmtMoney(OAT_UPCHARGE)} − ${fmtMoney(BYOC_DISCOUNT)} = ${fmtMoney(unit)}${qty > 1 ? ` × ${qty} = ${fmtMoney(total)}` : ""}`
+        : pendingTyped.oat && !pendingTyped.byoc
+          ? `Confirm: ${drink.name} with oat milk — ${fmtMoney(base)} + ${fmtMoney(OAT_UPCHARGE)} = ${fmtMoney(unit)}${qty > 1 ? ` × ${qty} = ${fmtMoney(total)}` : ""}`
+          : !pendingTyped.oat && pendingTyped.byoc
+            ? `Confirm: ${drink.name} (BYOC) — ${fmtMoney(base)} − ${fmtMoney(BYOC_DISCOUNT)} = ${fmtMoney(unit)}${qty > 1 ? ` × ${qty} = ${fmtMoney(total)}` : ""}`
+            : `Confirm: ${drink.name} — ${fmtMoney(unit)}${qty > 1 ? ` × ${qty} = ${fmtMoney(total)}` : ""}`;
+
+    await safeTg(() =>
+      tgEditMessageText(chatId, pendingTyped.messageId, confirmText),
+    );
+    await safeTg(() =>
+      tgEditReplyMarkup(chatId, pendingTyped.messageId, confirm),
+    );
+    awaitQtyByUser.delete(awaitKey);
+    return;
+  }
 
   if (text === "/start" || text === "/menu") {
     await ensureMenuLoadedOnce();
@@ -348,6 +411,19 @@ async function handleCallback(cb: TgCallbackQuery) {
     // Use in-memory qty per message; do not edit message on +/- for speed
     const qtyKey = keyFromParts(chatId, messageId, idx, oatFlag, byocFlag);
     const current = Math.max(1, Number(pendingQtyByMessage.get(qtyKey) || 1));
+    if (op === "noop") {
+      awaitQtyByUser.set(keyFromParts(chatId, cb.from.id), {
+        messageId,
+        idx,
+        oat: oatFlag,
+        byoc: byocFlag,
+      });
+      await safeTg(() => tgAnswerCallbackQuery(cb.id, "Type a number (1–20)"));
+      await safeTg(() =>
+        tgSendMessage(chatId, "Please type a quantity (1–20) and send it."),
+      );
+      return;
+    }
     const newQty =
       op === "inc"
         ? current + 1

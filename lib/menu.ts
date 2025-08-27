@@ -229,17 +229,13 @@ export function chunk<T>(arr: readonly T[], size: number): T[][] {
 }
 
 /**
- * Build a confirmation keyboard with quantity controls.
- * Rows:
- * - Row 1: [−] [xN] [+] to adjust quantity
- * - Row 2: [✅ Confirm] [↩ Cancel]
+ * Build a simple confirmation keyboard without quantity controls.
  *
- * callback_data:
- * - Decrement: "Q|<idx>|<oatFlag 0|1>|<byocFlag 0|1>|dec|<qty>"
- * - No-op label: "Q|<idx>|<oatFlag 0|1>|<byocFlag 0|1>|noop|<qty>"
- * - Increment: "Q|<idx>|<oatFlag 0|1>|<byocFlag 0|1>|inc|<qty>"
- * - Confirm:   "Y|<idx>|<oatFlag 0|1>|<byocFlag 0|1>"
- * - Cancel:    "N|<idx>"
+ * Buttons:
+ * - Confirm: "Y|<idx>|<oatFlag 0|1>|<byocFlag 0|1>"
+ * - Cancel:  "N|<idx>"
+ *
+ * Note: Quantity should be entered by the user via text (limit externally).
  */
 export function buildConfirmKeyboard(
   idx: number,
@@ -247,18 +243,6 @@ export function buildConfirmKeyboard(
   byoc: boolean = false,
   qty: number = 1,
 ): InlineKeyboardMarkup {
-  const dec: InlineKeyboardButton = {
-    text: "−",
-    callback_data: `Q|${idx}|${oat ? 1 : 0}|${byoc ? 1 : 0}|dec|${qty}`,
-  };
-  const qtyLabel: InlineKeyboardButton = {
-    text: `x${qty}`,
-    callback_data: `Q|${idx}|${oat ? 1 : 0}|${byoc ? 1 : 0}|noop|${qty}`,
-  };
-  const inc: InlineKeyboardButton = {
-    text: "+",
-    callback_data: `Q|${idx}|${oat ? 1 : 0}|${byoc ? 1 : 0}|inc|${qty}`,
-  };
   const confirm: InlineKeyboardButton = {
     text: "✅ Confirm",
     callback_data: `Y|${idx}|${oat ? 1 : 0}|${byoc ? 1 : 0}`,
@@ -267,10 +251,5 @@ export function buildConfirmKeyboard(
     text: "↩ Cancel",
     callback_data: `N|${idx}`,
   };
-  return {
-    inline_keyboard: [
-      [dec, qtyLabel, inc],
-      [confirm, cancel],
-    ],
-  };
+  return { inline_keyboard: [[confirm, cancel]] };
 }

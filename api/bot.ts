@@ -104,7 +104,18 @@ type TgUpdate = {
    Utils
 ============================= */
 
-const nowIso = () => new Date().toISOString();
+const nowIso = () => {
+  // Return Singapore time (UTC+08:00) in ISO-like format without milliseconds
+  const now = new Date();
+  const sgt = new Date(now.getTime() + 8 * 60 * 60 * 1000); // shift to UTC+8
+  const y = sgt.getUTCFullYear();
+  const m = String(sgt.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(sgt.getUTCDate()).padStart(2, "0");
+  const hh = String(sgt.getUTCHours()).padStart(2, "0");
+  const mm = String(sgt.getUTCMinutes()).padStart(2, "0");
+  const ss = String(sgt.getUTCSeconds()).padStart(2, "0");
+  return `${y}-${m}-${d}T${hh}:${mm}:${ss}+08:00`;
+};
 
 async function safeTg<T>(fn: () => Promise<T>): Promise<T | undefined> {
   try {

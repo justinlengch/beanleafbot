@@ -36,6 +36,30 @@ export type TgInlineKeyboardMarkup = {
   inline_keyboard: TgInlineKeyboardButton[][];
 };
 
+export type TgKeyboardButton = {
+  text: string;
+  request_contact?: boolean;
+  request_location?: boolean;
+};
+
+export type TgReplyKeyboardMarkup = {
+  keyboard: TgKeyboardButton[][];
+  resize_keyboard?: boolean;
+  one_time_keyboard?: boolean;
+  input_field_placeholder?: string;
+  selective?: boolean;
+};
+
+export type TgReplyKeyboardRemove = {
+  remove_keyboard: true;
+  selective?: boolean;
+};
+
+export type TgReplyMarkup =
+  | TgInlineKeyboardMarkup
+  | TgReplyKeyboardMarkup
+  | TgReplyKeyboardRemove;
+
 type TgApiEnvelope<T> = {
   ok: boolean;
   result?: T;
@@ -91,11 +115,12 @@ async function callTelegram<T = any>(
 export function tgSendMessage(
   chat_id: number,
   text: string,
-  reply_markup?: TgInlineKeyboardMarkup,
+  reply_markup?: TgReplyMarkup,
   options?: {
     disable_notification?: boolean;
     timeoutMs?: number;
     parse_mode?: "HTML" | "Markdown" | "MarkdownV2";
+    input_field_placeholder?: string;
   },
 ) {
   return callTelegram(
@@ -106,6 +131,7 @@ export function tgSendMessage(
       parse_mode: options?.parse_mode ?? "HTML",
       reply_markup,
       disable_notification: options?.disable_notification ?? true,
+      input_field_placeholder: options?.input_field_placeholder,
     },
     options?.timeoutMs,
   );
@@ -151,6 +177,24 @@ export function tgEditReplyMarkup(
       chat_id,
       message_id,
       reply_markup,
+    },
+    options?.timeoutMs,
+  );
+}
+
+/**
+ * Delete a message.
+ */
+export function tgDeleteMessage(
+  chat_id: number,
+  message_id: number,
+  options?: { timeoutMs?: number },
+) {
+  return callTelegram(
+    "deleteMessage",
+    {
+      chat_id,
+      message_id,
     },
     options?.timeoutMs,
   );

@@ -20,6 +20,7 @@ import {
   tgEditMessageText,
   tgEditReplyMarkup,
   tgAnswerCallbackQuery,
+  tgDeleteMessage,
   tgNotifyAdmin,
 } from "../lib/telegram";
 import {
@@ -58,9 +59,15 @@ const lastOrderDetailsByChat = new Map<
   { drinkName: string; oatMilk: boolean; byoc: boolean; qty: number }
 >();
 const pendingQtyByMessage = new Map<string, number>();
-const awaitQtyByUser = new Map<
+const qtyPadByUser = new Map<
   string,
-  { messageId: number; idx: number; oat: boolean; byoc: boolean }
+  {
+    messageId: number;
+    idx: number;
+    oat: boolean;
+    byoc: boolean;
+    buffer: string;
+  }
 >();
 
 /* =============================
@@ -186,62 +193,77 @@ async function handleMessage(msg: TgMessage) {
   const chatId = msg.chat.id;
   const text = (msg.text || "").trim();
 
-  // If awaiting a typed quantity from this user, parse it and update the confirm UI
-  const awaitKey = keyFromParts(chatId, msg.from?.id ?? 0);
-  const pendingTyped = awaitQtyByUser.get(awaitKey);
-  if (pendingTyped) {
-    const n = Number(text);
-    const qty = Number.isFinite(n)
-      ? Math.max(1, Math.min(20, Math.floor(n)))
-      : NaN;
-    if (!Number.isFinite(qty)) {
-      await safeTg(() =>
-        tgSendMessage(chatId, "Please send a number between 1 and 20."),
+  // If a numeric keypad is active for this user, handle digit/Clear/Done
+  const padKey = keyFromParts(chatId, msg.from?.id ?? 0);
+  const pad = qtyPadByUser.get(padKey);
+  if (pad) {
+    const t = text.trim();
+    if (/^[0-9]$/.test(t)) {
+      // Append digit (limit to 2 digits)
+      const next = (pad.buffer + t).slice(0, 2);
+      qtyPadByUser.set(padKey, { ...pad, buffer: next });
+      await safeTg(() => tgDeleteMessage(chatId, msg.message_id));
+      return;
+    }
+    if (/^clear$/i.test(t)) {
+      qtyPadByUser.set(padKey, { ...pad, buffer: "" });
+      await safeTg(() => tgDeleteMessage(chatId, msg.message_id));
+      await safeTg(() => tgSendMessage(chatId, "Cleared."));
+      return;
+    }
+    if (/^done$/i.test(t)) {
+      await safeTg(() => tgDeleteMessage(chatId, msg.message_id));
+      const buf = pad.buffer;
+      const n = Number(buf);
+      const qty = Number.isFinite(n)
+        ? Math.max(1, Math.min(20, Math.floor(n)))
+        : NaN;
+      if (!Number.isFinite(qty)) {
+        await safeTg(() => tgSendMessage(chatId, "Please enter 1–20."));
+        return;
+      }
+      const drink = DRINKS[pad.idx as number];
+      if (!drink) {
+        qtyPadByUser.delete(padKey);
+        return;
+      }
+      const qtyKey = keyFromParts(
+        chatId,
+        pad.messageId,
+        pad.idx,
+        pad.oat,
+        pad.byoc,
       );
+      pendingQtyByMessage.set(qtyKey, qty);
+
+      const base = drink.price;
+      const up = pad.oat ? OAT_UPCHARGE : 0;
+      const disc = pad.byoc ? BYOC_DISCOUNT : 0;
+      const unit = base + up - disc;
+      const total = unit * qty;
+
+      const confirm = buildConfirmKeyboard(pad.idx, pad.oat, pad.byoc, qty);
+      const confirmText =
+        pad.oat && pad.byoc
+          ? `Confirm: ${drink.name} with oat milk (BYOC) — ${fmtMoney(base)} + ${fmtMoney(OAT_UPCHARGE)} − ${fmtMoney(BYOC_DISCOUNT)} = ${fmtMoney(unit)}${qty > 1 ? ` × ${qty} = ${fmtMoney(total)}` : ""}`
+          : pad.oat && !pad.byoc
+            ? `Confirm: ${drink.name} with oat milk — ${fmtMoney(base)} + ${fmtMoney(OAT_UPCHARGE)} = ${fmtMoney(unit)}${qty > 1 ? ` × ${qty} = ${fmtMoney(total)}` : ""}`
+            : !pad.oat && pad.byoc
+              ? `Confirm: ${drink.name} (BYOC) — ${fmtMoney(base)} − ${fmtMoney(BYOC_DISCOUNT)} = ${fmtMoney(unit)}${qty > 1 ? ` × ${qty} = ${fmtMoney(total)}` : ""}`
+              : `Confirm: ${drink.name} — ${fmtMoney(unit)}${qty > 1 ? ` × ${qty} = ${fmtMoney(total)}` : ""}`;
+
+      await safeTg(() => tgEditMessageText(chatId, pad.messageId, confirmText));
+      await safeTg(() => tgEditReplyMarkup(chatId, pad.messageId, confirm));
+      // Remove the reply keyboard
+      await safeTg(() =>
+        tgSendMessage(chatId, "✓ Quantity set.", {
+          remove_keyboard: true,
+        } as any),
+      );
+      qtyPadByUser.delete(padKey);
       return;
     }
-    const drink = DRINKS[pendingTyped.idx as number];
-    if (!drink) {
-      awaitQtyByUser.delete(awaitKey);
-      return;
-    }
-    const qtyKey = keyFromParts(
-      chatId,
-      pendingTyped.messageId,
-      pendingTyped.idx,
-      pendingTyped.oat,
-      pendingTyped.byoc,
-    );
-    pendingQtyByMessage.set(qtyKey, qty);
-
-    const base = drink.price;
-    const up = pendingTyped.oat ? OAT_UPCHARGE : 0;
-    const disc = pendingTyped.byoc ? BYOC_DISCOUNT : 0;
-    const unit = base + up - disc;
-    const total = unit * qty;
-
-    const confirm = buildConfirmKeyboard(
-      pendingTyped.idx,
-      pendingTyped.oat,
-      pendingTyped.byoc,
-      qty,
-    );
-    const confirmText =
-      pendingTyped.oat && pendingTyped.byoc
-        ? `Confirm: ${drink.name} with oat milk (BYOC) — ${fmtMoney(base)} + ${fmtMoney(OAT_UPCHARGE)} − ${fmtMoney(BYOC_DISCOUNT)} = ${fmtMoney(unit)}${qty > 1 ? ` × ${qty} = ${fmtMoney(total)}` : ""}`
-        : pendingTyped.oat && !pendingTyped.byoc
-          ? `Confirm: ${drink.name} with oat milk — ${fmtMoney(base)} + ${fmtMoney(OAT_UPCHARGE)} = ${fmtMoney(unit)}${qty > 1 ? ` × ${qty} = ${fmtMoney(total)}` : ""}`
-          : !pendingTyped.oat && pendingTyped.byoc
-            ? `Confirm: ${drink.name} (BYOC) — ${fmtMoney(base)} − ${fmtMoney(BYOC_DISCOUNT)} = ${fmtMoney(unit)}${qty > 1 ? ` × ${qty} = ${fmtMoney(total)}` : ""}`
-            : `Confirm: ${drink.name} — ${fmtMoney(unit)}${qty > 1 ? ` × ${qty} = ${fmtMoney(total)}` : ""}`;
-
-    await safeTg(() =>
-      tgEditMessageText(chatId, pendingTyped.messageId, confirmText),
-    );
-    await safeTg(() =>
-      tgEditReplyMarkup(chatId, pendingTyped.messageId, confirm),
-    );
-    awaitQtyByUser.delete(awaitKey);
+    // Ignore other inputs while keypad is active
     return;
   }
 
@@ -412,15 +434,28 @@ async function handleCallback(cb: TgCallbackQuery) {
     const qtyKey = keyFromParts(chatId, messageId, idx, oatFlag, byocFlag);
     const current = Math.max(1, Number(pendingQtyByMessage.get(qtyKey) || 1));
     if (op === "noop") {
-      awaitQtyByUser.set(keyFromParts(chatId, cb.from.id), {
+      const padMarkup = {
+        keyboard: [
+          [{ text: "1" }, { text: "2" }, { text: "3" }],
+          [{ text: "4" }, { text: "5" }, { text: "6" }],
+          [{ text: "7" }, { text: "8" }, { text: "9" }],
+          [{ text: "Clear" }, { text: "0" }, { text: "Done" }],
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: false,
+      } as any;
+      qtyPadByUser.set(keyFromParts(chatId, cb.from.id), {
         messageId,
         idx,
         oat: oatFlag,
         byoc: byocFlag,
+        buffer: "",
       });
-      await safeTg(() => tgAnswerCallbackQuery(cb.id, "Type a number (1–20)"));
+      await safeTg(() => tgAnswerCallbackQuery(cb.id, "Numeric keypad opened"));
       await safeTg(() =>
-        tgSendMessage(chatId, "Please type a quantity (1–20) and send it."),
+        tgSendMessage(chatId, "Choose quantity (1–20):", padMarkup, {
+          input_field_placeholder: "Tap digits, then Done",
+        }),
       );
       return;
     }

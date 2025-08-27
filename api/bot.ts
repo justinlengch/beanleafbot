@@ -267,14 +267,21 @@ async function handleMessage(msg: TgMessage) {
     return;
   }
 
-  if (text === "/start" || text === "/menu") {
+  if (text === "/start") {
+    await safeTg(() =>
+      tgSendMessage(chatId, "Use /menu to view our drinks menu!"),
+    );
+    return;
+  }
+
+  if (text === "/log") {
     await ensureMenuLoadedOnce();
     const menu = buildMainMenu();
     await safeTg(() => tgSendMessage(chatId, "Choose a drink:", menu));
     return;
   }
 
-  if (text === "/list") {
+  if (text === "/menu") {
     await safeTg(() => tgSendMessage(chatId, listText()));
     return;
   }

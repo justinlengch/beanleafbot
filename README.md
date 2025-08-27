@@ -13,8 +13,8 @@ Highlights:
 ## Features
 
 - Commands:
-  - /start or /menu → inline keyboard of drinks (2 per row)
-  - /list → bullet list with prices, marks “(oat opt.)” when available
+  - /log → inline keyboard of drinks (2 per row)
+  - /menu → bullet list with prices, marks “(oat opt.)” when available
   - /undo → removes the last order from the Orders sheet (if any)
 - Idempotency:
   - In-memory LRU for update_id to ignore retries
@@ -157,10 +157,10 @@ curl "https://api.telegram.org/bot$BOT_TOKEN/deleteWebhook?drop_pending_updates=
 
 ## Usage
 
-- /start or /menu:
+- /log:
   - Displays an inline keyboard of drinks (2 per row)
   - Label format: Name ($X.XX), adds a “⋆” for oat-eligible items
-- /list:
+- /menu:
   - Sends a bullet list of all drinks with prices, marking (oat opt.) where applicable
 - /undo:
   - Removes the last order from the Orders sheet (if any)

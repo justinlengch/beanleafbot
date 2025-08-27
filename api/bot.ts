@@ -55,7 +55,7 @@ const milkPromptOnce = new OnceGuard<string>(1000); // guard to only show oat ch
 const lastRowByChat = new Map<string, number>(); // key: chatId:userId -> last appended row (1-based)
 const lastOrderDetailsByChat = new Map<
   string,
-  { drinkName: string; oatMilk: boolean; byoc: boolean }
+  { drinkName: string; oatMilk: boolean; byoc: boolean; qty: number }
 >();
 
 /* =============================
@@ -213,14 +213,16 @@ async function handleMessage(msg: TgMessage) {
       if (!details) {
         undoneText = "Undid your last order.";
       } else {
+        const qtyLabel =
+          details.qty && details.qty > 1 ? ` × ${details.qty}` : "";
         if (details.oatMilk && details.byoc) {
-          undoneText = `Undid: ${details.drinkName} with oat milk (BYOC).`;
+          undoneText = `Undid: ${details.drinkName} with oat milk (BYOC)${qtyLabel}.`;
         } else if (details.oatMilk) {
-          undoneText = `Undid: ${details.drinkName} with oat milk.`;
+          undoneText = `Undid: ${details.drinkName} with oat milk${qtyLabel}.`;
         } else if (details.byoc) {
-          undoneText = `Undid: ${details.drinkName} (BYOC).`;
+          undoneText = `Undid: ${details.drinkName} (BYOC)${qtyLabel}.`;
         } else {
-          undoneText = `Undid: ${details.drinkName}.`;
+          undoneText = `Undid: ${details.drinkName}${qtyLabel}.`;
         }
       }
       await safeTg(() => tgSendMessage(chatId, undoneText));
@@ -310,7 +312,7 @@ async function handleCallback(cb: TgCallbackQuery) {
       await safeTg(() => tgAnswerCallbackQuery(cb.id, ""));
       return;
     }
-    const confirm = buildConfirmKeyboard(idx, oatFlag, byocFlag);
+    const confirm = buildConfirmKeyboard(idx, oatFlag, byocFlag, 1);
     const base = drink.price;
     const up = oatFlag ? OAT_UPCHARGE : 0;
     const disc = byocFlag ? BYOC_DISCOUNT : 0;
@@ -328,12 +330,48 @@ async function handleCallback(cb: TgCallbackQuery) {
     await safeTg(() => tgAnswerCallbackQuery(cb.id, ""));
     return;
   }
-  // Handle final confirmation: Y|<idx>|<oatFlag>|<byocFlag>
+  // Handle quantity adjustment: Q|<idx>|<oatFlag>|<byocFlag>|<op>|<qty>
+  if (data.startsWith("Q|")) {
+    const parts = data.split("|");
+    const idx = Number(parts[1]);
+    const oatFlag = parts[2] === "1";
+    const byocFlag = parts[3] === "1";
+    const op = parts[4] || "noop";
+    const qty = Math.max(1, Number(parts[5]) || 1);
+    const drink = DRINKS[idx as number];
+    if (!Number.isFinite(idx) || !drink) {
+      await safeTg(() => tgAnswerCallbackQuery(cb.id, ""));
+      return;
+    }
+    const newQty =
+      op === "inc" ? qty + 1 : op === "dec" ? Math.max(1, qty - 1) : qty;
+    const base = drink.price;
+    const up = oatFlag ? OAT_UPCHARGE : 0;
+    const disc = byocFlag ? BYOC_DISCOUNT : 0;
+    const unit = base + up - disc;
+    const total = unit * newQty;
+    const confirm = buildConfirmKeyboard(idx, oatFlag, byocFlag, newQty);
+    const confirmText =
+      oatFlag && byocFlag
+        ? `Confirm: ${drink.name} with oat milk (BYOC) — ${fmtMoney(base)} + ${fmtMoney(OAT_UPCHARGE)} − ${fmtMoney(BYOC_DISCOUNT)} = ${fmtMoney(unit)}${newQty > 1 ? ` × ${newQty} = ${fmtMoney(total)}` : ""}`
+        : oatFlag && !byocFlag
+          ? `Confirm: ${drink.name} with oat milk — ${fmtMoney(base)} + ${fmtMoney(OAT_UPCHARGE)} = ${fmtMoney(unit)}${newQty > 1 ? ` × ${newQty} = ${fmtMoney(total)}` : ""}`
+          : !oatFlag && byocFlag
+            ? `Confirm: ${drink.name} (BYOC) — ${fmtMoney(base)} − ${fmtMoney(BYOC_DISCOUNT)} = ${fmtMoney(unit)}${newQty > 1 ? ` × ${newQty} = ${fmtMoney(total)}` : ""}`
+            : `Confirm: ${drink.name} — ${fmtMoney(unit)}${newQty > 1 ? ` × ${newQty} = ${fmtMoney(total)}` : ""}`;
+    await safeTg(() => tgEditMessageText(chatId, messageId, confirmText));
+    await safeTg(() => tgEditReplyMarkup(chatId, messageId, confirm));
+    await safeTg(() => tgAnswerCallbackQuery(cb.id, ""));
+    return;
+  }
+
+  // Handle final confirmation: Y|<idx>|<oatFlag>|<byocFlag>|<qty>
   if (data.startsWith("Y|")) {
     const parts = data.split("|");
     const idx = Number(parts[1]);
     const oatFlag = parts[2] === "1";
     const byocFlag = parts[3] === "1";
+    const qty = Math.max(1, Number(parts[4]) || 1);
     const drink = DRINKS[idx as number];
     if (!Number.isFinite(idx) || !drink) {
       await safeTg(() => tgAnswerCallbackQuery(cb.id, ""));
@@ -348,21 +386,23 @@ async function handleCallback(cb: TgCallbackQuery) {
       drinkIdx: idx,
       oat: oatFlag,
       byoc: byocFlag,
+      qty,
     });
 
     if (ok) {
       const base = drink.price;
       const up = oatFlag ? OAT_UPCHARGE : 0;
       const disc = byocFlag ? BYOC_DISCOUNT : 0;
-      const final = base + up - disc;
+      const unit = base + up - disc;
+      const total = unit * qty;
       const savedText =
         oatFlag && byocFlag
-          ? `Saved: ${drink.name} with oat milk (BYOC) — ${fmtMoney(base)} + ${fmtMoney(OAT_UPCHARGE)} − ${fmtMoney(BYOC_DISCOUNT)} = ${fmtMoney(final)}`
+          ? `Saved: ${drink.name} with oat milk (BYOC) — ${fmtMoney(base)} + ${fmtMoney(OAT_UPCHARGE)} − ${fmtMoney(BYOC_DISCOUNT)} = ${fmtMoney(unit)}${qty > 1 ? ` × ${qty} = ${fmtMoney(total)}` : ""}`
           : oatFlag && !byocFlag
-            ? `Saved: ${drink.name} with oat milk — ${fmtMoney(base)} + ${fmtMoney(OAT_UPCHARGE)} = ${fmtMoney(final)}`
+            ? `Saved: ${drink.name} with oat milk — ${fmtMoney(base)} + ${fmtMoney(OAT_UPCHARGE)} = ${fmtMoney(unit)}${qty > 1 ? ` × ${qty} = ${fmtMoney(total)}` : ""}`
             : !oatFlag && byocFlag
-              ? `Saved: ${drink.name} (BYOC) — ${fmtMoney(base)} − ${fmtMoney(BYOC_DISCOUNT)} = ${fmtMoney(final)}`
-              : `Saved: ${drink.name} — ${fmtMoney(final)}`;
+              ? `Saved: ${drink.name} (BYOC) — ${fmtMoney(base)} − ${fmtMoney(BYOC_DISCOUNT)} = ${fmtMoney(unit)}${qty > 1 ? ` × ${qty} = ${fmtMoney(total)}` : ""}`
+              : `Saved: ${drink.name} — ${fmtMoney(unit)}${qty > 1 ? ` × ${qty} = ${fmtMoney(total)}` : ""}`;
       await safeTg(() => tgEditMessageText(chatId, messageId, savedText));
       await safeTg(() =>
         tgEditReplyMarkup(chatId, messageId, { inline_keyboard: [] }),
@@ -406,6 +446,7 @@ async function tryAppendOrder(params: {
   drinkIdx: number;
   oat: boolean;
   byoc: boolean;
+  qty: number;
 }): Promise<boolean> {
   try {
     const drink = DRINKS[params.drinkIdx];
@@ -435,8 +476,8 @@ async function tryAppendOrder(params: {
       fullName,
       drink: drinkLabel,
       price: priceFinal,
-      qty: 1,
-      total: priceFinal,
+      qty: params.qty,
+      total: Number((priceFinal * params.qty).toFixed(2)),
       oatMilk: params.oat,
       messageId: params.messageId,
       callbackId: params.callbackId,
@@ -459,6 +500,7 @@ async function tryAppendOrder(params: {
         drinkName: drink.name,
         oatMilk: params.oat,
         byoc: params.byoc,
+        qty: params.qty,
       });
     }
 

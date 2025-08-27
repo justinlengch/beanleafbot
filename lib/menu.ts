@@ -227,26 +227,48 @@ export function chunk<T>(arr: readonly T[], size: number): T[][] {
 }
 
 /**
- * Build a two-button confirmation keyboard for finalizing an order.
- * - Confirm: proceeds with logging the order
- * - Cancel: aborts and lets the caller decide what to show next
+ * Build a confirmation keyboard with quantity controls.
+ * Rows:
+ * - Row 1: [−] [xN] [+] to adjust quantity
+ * - Row 2: [✅ Confirm] [↩ Cancel]
  *
  * callback_data:
- * - Confirm: "Y|<idx>|<oatFlag 0|1>|<byocFlag 0|1>"
- * - Cancel:  "N|<idx>"
+ * - Decrement: "Q|<idx>|<oatFlag 0|1>|<byocFlag 0|1>|dec|<qty>"
+ * - No-op label: "Q|<idx>|<oatFlag 0|1>|<byocFlag 0|1>|noop|<qty>"
+ * - Increment: "Q|<idx>|<oatFlag 0|1>|<byocFlag 0|1>|inc|<qty>"
+ * - Confirm:   "Y|<idx>|<oatFlag 0|1>|<byocFlag 0|1>|<qty>"
+ * - Cancel:    "N|<idx>"
  */
 export function buildConfirmKeyboard(
   idx: number,
   oat: boolean,
   byoc: boolean = false,
+  qty: number = 1,
 ): InlineKeyboardMarkup {
+  const dec: InlineKeyboardButton = {
+    text: "−",
+    callback_data: `Q|${idx}|${oat ? 1 : 0}|${byoc ? 1 : 0}|dec|${qty}`,
+  };
+  const qtyLabel: InlineKeyboardButton = {
+    text: `x${qty}`,
+    callback_data: `Q|${idx}|${oat ? 1 : 0}|${byoc ? 1 : 0}|noop|${qty}`,
+  };
+  const inc: InlineKeyboardButton = {
+    text: "+",
+    callback_data: `Q|${idx}|${oat ? 1 : 0}|${byoc ? 1 : 0}|inc|${qty}`,
+  };
   const confirm: InlineKeyboardButton = {
     text: "✅ Confirm",
-    callback_data: `Y|${idx}|${oat ? 1 : 0}|${byoc ? 1 : 0}`,
+    callback_data: `Y|${idx}|${oat ? 1 : 0}|${byoc ? 1 : 0}|${qty}`,
   };
   const cancel: InlineKeyboardButton = {
     text: "↩ Cancel",
     callback_data: `N|${idx}`,
   };
-  return { inline_keyboard: [[confirm, cancel]] };
+  return {
+    inline_keyboard: [
+      [dec, qtyLabel, inc],
+      [confirm, cancel],
+    ],
+  };
 }

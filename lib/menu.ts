@@ -206,13 +206,15 @@ export function buildByocChoice(
 }
 
 /**
- * Bullet list text of all drinks with prices. Marks oat-eligible.
+ * Bullet list text of all drinks with prices.
+ * Shows price adjustments note at the top.
  */
 export function listText(): string {
-  return DRINKS.map((d) => {
-    const oatNote = d.oat ? " (oat opt.)" : "";
-    return `• ${d.name} — ${fmtMoney(d.price)}${oatNote}`;
-  }).join("\n");
+  const up = OAT_UPCHARGE.toFixed(2);
+  const disc = BYOC_DISCOUNT.toFixed(2);
+  const header = `(oat milk +${up}, BYOC -${disc})`;
+  const lines = DRINKS.map((d) => `• ${d.name} — ${fmtMoney(d.price)}`);
+  return [header, ...lines].join("\n");
 }
 
 /**

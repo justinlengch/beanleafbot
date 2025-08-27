@@ -269,14 +269,20 @@ async function handleMessage(msg: TgMessage) {
   const padKey = keyFromParts(chatId, msg.from?.id ?? 0);
   const pad = qtyPadByUser.get(padKey);
   if (pad) {
-    const n = Number((msg.text || "").trim());
-    const qty = Number.isFinite(n)
-      ? Math.max(1, Math.min(10, Math.floor(n)))
-      : NaN;
-    if (!Number.isFinite(qty)) {
-      await safeTg(() => tgSendMessage(chatId, "Please enter a number 1–10."));
+    const rawQty = (msg.text || "").trim();
+    await safeTg(() => tgDeleteMessage(chatId, msg.message_id));
+    const n = Number(rawQty);
+    const isInt = /^[0-9]+$/.test(rawQty) && Number.isInteger(n);
+    if (!isInt || n < 1 || n > 10) {
+      await safeTg(() =>
+        tgSendMessage(
+          chatId,
+          "Invalid. Please respond with a number between 1 - 10.",
+        ),
+      );
       return;
     }
+    const qty = n;
     const drink = DRINKS[pad.idx as number];
     if (!drink) {
       qtyPadByUser.delete(padKey);
@@ -482,6 +488,7 @@ async function handleCallback(cb: TgCallbackQuery) {
     }
 
     const choices = buildOatChoice(idx);
+    await safeTg(() => tgEditMessageText(chatId, messageId, "Milk Option:"));
     await safeTg(() => tgEditReplyMarkup(chatId, messageId, choices));
     await safeTg(() => tgAnswerCallbackQuery(cb.id, ""));
     return;

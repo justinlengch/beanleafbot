@@ -79,6 +79,7 @@ const qtyPadByUser = new Map<
     oat: boolean;
     byoc: boolean;
     buffer: string;
+    invalidWarnMessageId?: number;
   }
 >();
 
@@ -274,13 +275,29 @@ async function handleMessage(msg: TgMessage) {
     const n = Number(rawQty);
     const isInt = /^[0-9]+$/.test(rawQty) && Number.isInteger(n);
     if (!isInt || n < 1 || n > 10) {
-      await safeTg(() =>
+      if (typeof pad.invalidWarnMessageId === "number") {
+        await safeTg(() =>
+          tgDeleteMessage(chatId, pad.invalidWarnMessageId as number),
+        );
+      }
+      const warn = await safeTg(() =>
         tgSendMessage(
           chatId,
           "Invalid. Please respond with a number between 1 - 10.",
         ),
       );
+      if (warn && typeof (warn as any).message_id === "number") {
+        qtyPadByUser.set(padKey, {
+          ...pad,
+          invalidWarnMessageId: (warn as any).message_id,
+        });
+      }
       return;
+    }
+    if (typeof pad.invalidWarnMessageId === "number") {
+      await safeTg(() =>
+        tgDeleteMessage(chatId, pad.invalidWarnMessageId as number),
+      );
     }
     const qty = n;
     const drink = DRINKS[pad.idx as number];
